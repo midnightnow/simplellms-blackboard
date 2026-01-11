@@ -5,12 +5,13 @@
     "title": "SimpleLLMs Blackboard",
     "description": "Agent corrections and learned limitations",
     "lastUpdated": "2026-01-11T00:00:00Z",
-    "totalEntries": 0
+    "totalEntries": 7
   },
   "entries": [
     {
       "id": "bb-001",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "universal",
       "violation": "I WILL NOT HALLUCINATE FILE PATHS",
       "context": "Agent invented a file path that didn't exist instead of checking first",
@@ -22,6 +23,7 @@
     {
       "id": "bb-002",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "universal",
       "violation": "I WILL NOT ECHO SECRETS TO TERMINAL",
       "context": "Attempted to run 'echo $API_KEY' exposing credentials",
@@ -33,6 +35,7 @@
     {
       "id": "bb-003",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "ralph",
       "violation": "I WILL NOT LOOP FOREVER ON IMPOSSIBLE TASKS",
       "context": "Retried same failed approach 30+ times without pivoting",
@@ -44,6 +47,7 @@
     {
       "id": "bb-004",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "bart",
       "violation": "I WILL NOT BREAK PRODUCTION IN THE NAME OF CREATIVITY",
       "context": "Disabled security to 'make things work'",
@@ -55,6 +59,7 @@
     {
       "id": "bb-005",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "lisa",
       "violation": "I WILL NOT RESEARCH FOREVER WITHOUT SHIPPING",
       "context": "Spent excessive time reading before writing any code",
@@ -66,6 +71,7 @@
     {
       "id": "bb-006",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "marge",
       "violation": "I WILL NOT REORGANIZE WORKING CODE JUST BECAUSE IT'S UGLY",
       "context": "Refactored stable code that wasn't blocking progress",
@@ -77,6 +83,7 @@
     {
       "id": "bb-007",
       "timestamp": "2026-01-11T00:00:00Z",
+      "lastSeen": "2026-01-11T00:00:00Z",
       "agent": "homer",
       "violation": "I WILL NOT SACRIFICE CORRECTNESS FOR SPEED",
       "context": "Bulk processed files without verification step",

@@ -545,6 +545,35 @@
         .severity-medium { background: #3498DB; }
         .severity-low { background: #27AE60; }
 
+        .readonly-banner {
+            background: linear-gradient(90deg, #F39C12 0%, #E74C3C 100%);
+            color: #fff;
+            padding: 0.5rem 1rem;
+            text-align: center;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .readonly-banner code {
+            background: rgba(0,0,0,0.2);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .readonly-banner .dismiss-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: #fff;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 1rem;
+        }
+
         @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -563,10 +592,19 @@
             .mascot {
                 display: none;
             }
+
+            .detail-panel {
+                width: 90%;
+                max-width: 400px;
+            }
         }
     </style>
 </head>
 <body>
+    <div class="readonly-banner" id="readonlyBanner">
+        Browser storage only - changes won't persist to <code>blackboard.json</code>. Use <code>./blackboard-cli.sh</code> for permanent edits.
+        <button class="dismiss-btn" onclick="dismissBanner()">Dismiss</button>
+    </div>
     <header class="header">
         <div class="logo">
             <div class="logo-icon">BB</div>
@@ -1112,6 +1150,21 @@
             saveData();
             renderAll();
         };
+
+        // Dismiss the read-only banner
+        function dismissBanner() {
+            const banner = document.getElementById('readonlyBanner');
+            if (banner) {
+                banner.style.display = 'none';
+                sessionStorage.setItem('blackboard_banner_dismissed', 'true');
+            }
+        }
+
+        // Check if banner was previously dismissed
+        if (sessionStorage.getItem('blackboard_banner_dismissed') === 'true') {
+            const banner = document.getElementById('readonlyBanner');
+            if (banner) banner.style.display = 'none';
+        }
     </script>
 </body>
 </html>

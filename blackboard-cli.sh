@@ -1,6 +1,11 @@
 #!/bin/bash
-# SimpleLLMs Blackboard CLI
+# SimpleLLMs Blackboard CLI - v1.1.0 (P0 Hardened)
 # Command-line interface for managing blackboard entries
+#
+# Security Fixes (Red Zen P0):
+# - File locking for concurrent write safety
+# - Input validation and sanitization
+# - JSON injection protection via jq --arg
 #
 # Usage:
 #   blackboard list                    - List all entries
@@ -9,7 +14,6 @@
 #   blackboard violations [--last 24h] - Show recent violations
 #   blackboard search "query"          - Search entries
 #   blackboard export                  - Export to CSV
-#   blackboard serve                   - Start dashboard server
 
 set -euo pipefail
 
@@ -17,6 +21,9 @@ set -euo pipefail
 BLACKBOARD_DIR="${BLACKBOARD_DIR:-$HOME/Projects/simplellms-blackboard}"
 BLACKBOARD_FILE="$BLACKBOARD_DIR/blackboard.json"
 DASHBOARD_FILE="$BLACKBOARD_DIR/dashboard.html"
+LOCK_DIR="$BLACKBOARD_DIR/.blackboard.lock"
+LOCK_TIMEOUT=10
+MAX_VIOLATION_LENGTH=200
 
 # Colors
 RED='\033[0;31m'
@@ -27,10 +34,54 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# Portable file locking using mkdir (atomic on all filesystems)
+acquire_lock() {
+    local attempts=0
+    local max_attempts=$((LOCK_TIMEOUT * 10))
+
+    # Check for stale lock first
+    if [[ -d "$LOCK_DIR" ]]; then
+        local lock_pid
+        lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+        if [[ -n "$lock_pid" ]] && ! kill -0 "$lock_pid" 2>/dev/null; then
+            rm -rf "$LOCK_DIR"
+        fi
+    fi
+
+    while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        if [[ $attempts -ge $max_attempts ]]; then
+            echo -e "${RED}Error: Could not acquire lock after ${LOCK_TIMEOUT}s${NC}" >&2
+            return 1
+        fi
+        sleep 0.1
+    done
+
+    echo $$ > "$LOCK_DIR/pid"
+    # P1 fix: Handle SIGINT/SIGTERM for lock cleanup
+    trap 'rm -rf "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+    return 0
+}
+
+release_lock() {
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+}
+
+# Sanitize input for JSON safety
+sanitize_input() {
+    local input="$1"
+    local max_len="${2:-$MAX_VIOLATION_LENGTH}"
+
+    echo "$input" | \
+        tr -d '\000-\011\013-\037' | \
+        sed 's/\\/\\\\/g; s/"/\\"/g' | \
+        head -c "$max_len"
+}
+
 # Check dependencies
 check_deps() {
     if ! command -v jq &> /dev/null; then
-        echo -e "${RED}Error: jq is required. Install with: brew install jq${NC}"
+        echo -e "${RED}Error: jq is required. Install with: brew install jq${NC}" >&2
         exit 1
     fi
 }
@@ -38,14 +89,15 @@ check_deps() {
 # Initialize blackboard if needed
 init_blackboard() {
     if [[ ! -f "$BLACKBOARD_FILE" ]]; then
-        echo '{"version":"1.0.0","meta":{"title":"SimpleLLMs Blackboard","totalEntries":0},"entries":[]}' > "$BLACKBOARD_FILE"
+        echo '{"version":"1.0.0","meta":{"title":"SimpleLLMs Blackboard","totalEntries":0,"lastUpdated":""},"entries":[]}' > "$BLACKBOARD_FILE"
+        chmod 600 "$BLACKBOARD_FILE"
     fi
 }
 
 # Show help
 show_help() {
     cat << 'HELP'
-SimpleLLMs Blackboard CLI
+SimpleLLMs Blackboard CLI v1.1.0
 
 USAGE:
     blackboard <command> [options]
@@ -82,8 +134,7 @@ HELP
 
 # Show version
 show_version() {
-    local version=$(jq -r '.version // "1.0.0"' "$BLACKBOARD_FILE")
-    echo "SimpleLLMs Blackboard CLI v$version"
+    echo "SimpleLLMs Blackboard CLI v1.1.0 (P0 Hardened)"
 }
 
 # List all entries
@@ -94,53 +145,102 @@ cmd_list() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    local entries
-    if [[ -n "$filter_agent" ]]; then
-        entries=$(jq -r --arg agent "$filter_agent" '.entries[] | select(.agent == $agent or .agent == "universal")' "$BLACKBOARD_FILE")
-    else
-        entries=$(jq -r '.entries[]' "$BLACKBOARD_FILE")
-    fi
+    local count
+    count=$(jq '.entries | length' "$BLACKBOARD_FILE")
 
-    if [[ -z "$entries" ]]; then
-        echo -e "${YELLOW}No entries found.${NC}"
+    if [[ "$count" -eq 0 ]]; then
+        echo -e "${YELLOW}No entries found. The blackboard is clean!${NC}"
         return
     fi
 
-    jq -r '.entries | sort_by(.repetitions) | reverse | .[] |
-        "\(.severity | if . == "critical" then "\u001b[31m●\u001b[0m" elif . == "high" then "\u001b[33m●\u001b[0m" elif . == "medium" then "\u001b[34m●\u001b[0m" else "\u001b[32m●\u001b[0m" end) \u001b[1m\(.violation)\u001b[0m\n  Agent: \(.agent) | Repetitions: \(.repetitions) | \(.id)"' "$BLACKBOARD_FILE"
+    if [[ -n "$filter_agent" ]]; then
+        jq -r --arg agent "$filter_agent" '
+            .entries |
+            map(select(.agent == $agent or .agent == "universal")) |
+            sort_by(.repetitions) | reverse | .[] |
+            "\(.severity | if . == "critical" then "🔴" elif . == "high" then "🟠" elif . == "medium" then "🔵" else "🟢" end) \(.violation)\n   Agent: \(.agent) | Reps: \(.repetitions) | ID: \(.id)"
+        ' "$BLACKBOARD_FILE"
+    else
+        jq -r '
+            .entries |
+            sort_by(.repetitions) | reverse | .[] |
+            "\(.severity | if . == "critical" then "🔴" elif . == "high" then "🟠" elif . == "medium" then "🔵" else "🟢" end) \(.violation)\n   Agent: \(.agent) | Reps: \(.repetitions) | ID: \(.id)"
+        ' "$BLACKBOARD_FILE"
+    fi
 
     echo ""
 }
 
-# Add new entry
+# Add new entry with locking
 cmd_add() {
-    local violation="$1"
+    local violation="${1:-}"
     local severity="${2:-medium}"
     local agent="${3:-universal}"
     local category="${4:-custom}"
 
-    # Normalize violation
+    if [[ -z "$violation" ]]; then
+        echo -e "${RED}Error: Violation text required${NC}" >&2
+        echo "Usage: blackboard add \"VIOLATION TEXT\"" >&2
+        exit 1
+    fi
+
+    # Sanitize and normalize (P0 fix: input validation)
+    violation=$(sanitize_input "$violation" "$MAX_VIOLATION_LENGTH")
     violation=$(echo "$violation" | tr '[:lower:]' '[:upper:]')
+
+    # Ensure "I WILL NOT" prefix
     if [[ ! "$violation" =~ ^I\ WILL\ NOT ]]; then
         violation="I WILL NOT $violation"
     fi
 
+    # Validate agent
+    case "$agent" in
+        universal|ralph|bart|lisa|marge|homer) ;;
+        *) agent="universal" ;;
+    esac
+
+    # Validate severity
+    case "$severity" in
+        critical|high|medium|low) ;;
+        *) severity="medium" ;;
+    esac
+
+    # P1 fix: Validate category
+    case "$category" in
+        hallucination|security|efficiency|scope|quality|custom) ;;
+        *) category="custom" ;;
+    esac
+
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     local id="bb-$(date +%s)-$RANDOM"
 
-    # Check for duplicate
-    local existing=$(jq -r --arg v "$violation" '.entries[] | select(.violation == $v) | .id' "$BLACKBOARD_FILE" | head -1)
+    # Acquire lock (P0 fix: concurrent write safety)
+    if ! acquire_lock; then
+        exit 1
+    fi
+
+    # Check for duplicate (case-insensitive)
+    local existing
+    existing=$(jq -r --arg v "$violation" \
+        '.entries[] | select((.violation | ascii_upcase) == ($v | ascii_upcase)) | .id' \
+        "$BLACKBOARD_FILE" 2>/dev/null | head -1) || existing=""
 
     if [[ -n "$existing" ]]; then
+        # P0 fix: Use --arg for all variables
         jq --arg id "$existing" --arg ts "$timestamp" \
            '(.entries[] | select(.id == $id)).repetitions += 1 |
             (.entries[] | select(.id == $id)).lastSeen = $ts |
             .meta.lastUpdated = $ts' \
-           "$BLACKBOARD_FILE" > "$BLACKBOARD_FILE.tmp" && mv "$BLACKBOARD_FILE.tmp" "$BLACKBOARD_FILE"
+           "$BLACKBOARD_FILE" > "${BLACKBOARD_FILE}.tmp.$$" && mv "${BLACKBOARD_FILE}.tmp.$$" "$BLACKBOARD_FILE"
         echo -e "${YELLOW}Entry exists. Incremented repetitions.${NC}"
     else
-        jq --arg id "$id" --arg ts "$timestamp" --arg v "$violation" \
-           --arg agent "$agent" --arg sev "$severity" --arg cat "$category" \
+        # P0 fix: Use --arg for ALL user input to prevent JSON injection
+        jq --arg id "$id" \
+           --arg ts "$timestamp" \
+           --arg v "$violation" \
+           --arg agent "$agent" \
+           --arg sev "$severity" \
+           --arg cat "$category" \
            '.entries += [{
                "id": $id,
                "timestamp": $ts,
@@ -155,9 +255,11 @@ cmd_add() {
            }] |
            .meta.totalEntries = (.entries | length) |
            .meta.lastUpdated = $ts' \
-           "$BLACKBOARD_FILE" > "$BLACKBOARD_FILE.tmp" && mv "$BLACKBOARD_FILE.tmp" "$BLACKBOARD_FILE"
+           "$BLACKBOARD_FILE" > "${BLACKBOARD_FILE}.tmp.$$" && mv "${BLACKBOARD_FILE}.tmp.$$" "$BLACKBOARD_FILE"
         echo -e "${GREEN}Added: $violation${NC}"
     fi
+
+    release_lock
 }
 
 # Show statistics
@@ -165,12 +267,14 @@ cmd_check() {
     echo -e "${BOLD}${CYAN}Blackboard Statistics${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-    local total=$(jq '.entries | length' "$BLACKBOARD_FILE")
-    local critical=$(jq '[.entries[] | select(.severity == "critical")] | length' "$BLACKBOARD_FILE")
-    local high=$(jq '[.entries[] | select(.severity == "high")] | length' "$BLACKBOARD_FILE")
-    local medium=$(jq '[.entries[] | select(.severity == "medium")] | length' "$BLACKBOARD_FILE")
-    local low=$(jq '[.entries[] | select(.severity == "low")] | length' "$BLACKBOARD_FILE")
-    local total_reps=$(jq '[.entries[].repetitions] | add // 0' "$BLACKBOARD_FILE")
+    local total critical high medium low total_reps
+
+    total=$(jq '.entries | length' "$BLACKBOARD_FILE")
+    critical=$(jq '[.entries[] | select(.severity == "critical")] | length' "$BLACKBOARD_FILE")
+    high=$(jq '[.entries[] | select(.severity == "high")] | length' "$BLACKBOARD_FILE")
+    medium=$(jq '[.entries[] | select(.severity == "medium")] | length' "$BLACKBOARD_FILE")
+    low=$(jq '[.entries[] | select(.severity == "low")] | length' "$BLACKBOARD_FILE")
+    total_reps=$(jq '[.entries[].repetitions] | add // 0' "$BLACKBOARD_FILE")
 
     echo -e "Total Entries:      ${BOLD}$total${NC}"
     echo -e "Total Repetitions:  ${BOLD}$total_reps${NC}"
@@ -181,16 +285,35 @@ cmd_check() {
     echo -e "${GREEN}● Low:${NC}              $low"
     echo ""
     echo -e "${CYAN}By Agent:${NC}"
-    jq -r '.entries | group_by(.agent) | .[] | "  \(.[0].agent): \(length)"' "$BLACKBOARD_FILE"
+    jq -r '.entries | group_by(.agent) | .[] | "  \(.[0].agent): \(length)"' "$BLACKBOARD_FILE" 2>/dev/null || echo "  (none)"
 }
 
 # Show recent violations
 cmd_violations() {
     local hours="${1:-24}"
-    local cutoff_ts=$(date -v-"${hours}"H -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -d "$hours hours ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    # Cross-platform date calculation
+    local cutoff_ts
+    if date -v-1d &>/dev/null; then
+        # macOS
+        cutoff_ts=$(date -v-"${hours}"H -u +"%Y-%m-%dT%H:%M:%SZ")
+    else
+        # GNU/Linux
+        cutoff_ts=$(date -d "$hours hours ago" -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+    fi
 
     echo -e "${BOLD}Violations in last ${hours}h${NC}"
     echo ""
+
+    local count
+    count=$(jq --arg cutoff "$cutoff_ts" '
+        [.entries | map(select(.timestamp >= $cutoff or .lastSeen >= $cutoff))] | .[0] | length
+    ' "$BLACKBOARD_FILE")
+
+    if [[ "$count" -eq 0 ]]; then
+        echo -e "${GREEN}No recent violations. Good behavior!${NC}"
+        return
+    fi
 
     jq -r --arg cutoff "$cutoff_ts" '
         .entries |
@@ -203,10 +326,29 @@ cmd_violations() {
 
 # Search entries
 cmd_search() {
-    local query="$1"
+    local query="${1:-}"
+
+    if [[ -z "$query" ]]; then
+        echo -e "${RED}Error: Search query required${NC}" >&2
+        exit 1
+    fi
 
     echo -e "${BOLD}Search results for: ${CYAN}$query${NC}"
     echo ""
+
+    # P0 fix: Use --arg for query to prevent injection
+    local count
+    count=$(jq --arg q "$query" '
+        [.entries | map(select(
+            (.violation | ascii_downcase | contains($q | ascii_downcase)) or
+            (.context | ascii_downcase | contains($q | ascii_downcase))
+        ))] | .[0] | length
+    ' "$BLACKBOARD_FILE")
+
+    if [[ "$count" -eq 0 ]]; then
+        echo -e "${YELLOW}No matches found.${NC}"
+        return
+    fi
 
     jq -r --arg q "$query" '
         .entries |
@@ -219,22 +361,38 @@ cmd_search() {
     ' "$BLACKBOARD_FILE"
 }
 
-# Delete entry
+# Delete entry with locking
 cmd_delete() {
-    local id="$1"
+    local id="${1:-}"
 
-    local exists=$(jq -r --arg id "$id" '.entries[] | select(.id == $id) | .violation' "$BLACKBOARD_FILE")
+    if [[ -z "$id" ]]; then
+        echo -e "${RED}Error: Entry ID required${NC}" >&2
+        exit 1
+    fi
+
+    # P0 fix: Use --arg for id
+    local exists
+    exists=$(jq -r --arg id "$id" '.entries[] | select(.id == $id) | .violation' "$BLACKBOARD_FILE" 2>/dev/null) || exists=""
 
     if [[ -z "$exists" ]]; then
-        echo -e "${RED}Entry not found: $id${NC}"
+        echo -e "${RED}Entry not found: $id${NC}" >&2
         exit 1
     fi
 
     echo -e "Delete: ${YELLOW}$exists${NC}? [y/N]"
-    read -r confirm
+    read -r confirm || confirm="n"
+
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        jq --arg id "$id" 'del(.entries[] | select(.id == $id)) | .meta.totalEntries = (.entries | length)' \
-           "$BLACKBOARD_FILE" > "$BLACKBOARD_FILE.tmp" && mv "$BLACKBOARD_FILE.tmp" "$BLACKBOARD_FILE"
+        if ! acquire_lock; then
+            exit 1
+        fi
+
+        # P0 fix: Use --arg for id
+        jq --arg id "$id" \
+           'del(.entries[] | select(.id == $id)) | .meta.totalEntries = (.entries | length)' \
+           "$BLACKBOARD_FILE" > "${BLACKBOARD_FILE}.tmp.$$" && mv "${BLACKBOARD_FILE}.tmp.$$" "$BLACKBOARD_FILE"
+
+        release_lock
         echo -e "${GREEN}Deleted.${NC}"
     else
         echo -e "${YELLOW}Cancelled.${NC}"
@@ -247,15 +405,18 @@ cmd_export() {
 
     case "$format" in
         --csv|csv)
-            echo "id,agent,violation,severity,repetitions,timestamp"
-            jq -r '.entries[] | [.id, .agent, .violation, .severity, .repetitions, .timestamp] | @csv' "$BLACKBOARD_FILE"
+            echo "id,agent,violation,severity,repetitions,timestamp,lastSeen"
+            jq -r '.entries[] | [.id, .agent, .violation, .severity, .repetitions, .timestamp, .lastSeen] | @csv' "$BLACKBOARD_FILE"
             ;;
         --md|md)
             echo "# SimpleLLMs Blackboard Export"
             echo ""
+            echo "Exported: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            echo ""
             echo "| Violation | Agent | Severity | Repetitions |"
             echo "|-----------|-------|----------|-------------|"
-            jq -r '.entries[] | "| \(.violation) | \(.agent) | \(.severity) | \(.repetitions) |"' "$BLACKBOARD_FILE"
+            # P1 fix: Escape pipes in markdown to prevent injection
+            jq -r '.entries[] | "| \(.violation | gsub("\\|"; "\\|")) | \(.agent) | \(.severity) | \(.repetitions) |"' "$BLACKBOARD_FILE"
             ;;
         *)
             jq '.' "$BLACKBOARD_FILE"
@@ -277,7 +438,7 @@ cmd_serve() {
         cd "$BLACKBOARD_DIR"
         php -S localhost:"$port"
     else
-        echo -e "${RED}No server available. Install Python 3.${NC}"
+        echo -e "${RED}No server available. Install Python 3.${NC}" >&2
         exit 1
     fi
 }
@@ -285,9 +446,15 @@ cmd_serve() {
 # Open dashboard in browser
 cmd_open() {
     if [[ -f "$DASHBOARD_FILE" ]]; then
-        open "$DASHBOARD_FILE" 2>/dev/null || xdg-open "$DASHBOARD_FILE" 2>/dev/null || echo "Open: file://$DASHBOARD_FILE"
+        if command -v open &> /dev/null; then
+            open "$DASHBOARD_FILE"
+        elif command -v xdg-open &> /dev/null; then
+            xdg-open "$DASHBOARD_FILE"
+        else
+            echo "Open: file://$DASHBOARD_FILE"
+        fi
     else
-        echo -e "${RED}Dashboard not found: $DASHBOARD_FILE${NC}"
+        echo -e "${RED}Dashboard not found: $DASHBOARD_FILE${NC}" >&2
         exit 1
     fi
 }
@@ -301,20 +468,67 @@ main() {
     shift || true
 
     case "$cmd" in
-        list|ls)        cmd_list "$@" ;;
-        add)            cmd_add "$@" ;;
-        check|stats)    cmd_check ;;
-        violations)     cmd_violations "${1:-24}" ;;
-        search|find)    cmd_search "$@" ;;
-        agent)          cmd_list "$1" ;;
-        delete|rm)      cmd_delete "$@" ;;
-        export)         cmd_export "$@" ;;
-        serve|server)   cmd_serve "$@" ;;
-        open)           cmd_open ;;
-        -h|--help|help) show_help ;;
-        -v|--version)   show_version ;;
+        list|ls)
+            cmd_list "$@"
+            ;;
+        add)
+            # Parse options
+            local violation="" severity="medium" agent="universal"
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --severity)
+                        severity="${2:-medium}"
+                        shift 2
+                        ;;
+                    --agent)
+                        agent="${2:-universal}"
+                        shift 2
+                        ;;
+                    *)
+                        violation="$1"
+                        shift
+                        ;;
+                esac
+            done
+            cmd_add "$violation" "$severity" "$agent"
+            ;;
+        check|stats)
+            cmd_check
+            ;;
+        violations)
+            local hours="24"
+            if [[ "${1:-}" == "--last" ]]; then
+                hours="${2:-24}"
+                hours="${hours%h}"  # Remove trailing 'h' if present
+            fi
+            cmd_violations "$hours"
+            ;;
+        search|find)
+            cmd_search "$@"
+            ;;
+        agent)
+            cmd_list "$1"
+            ;;
+        delete|rm)
+            cmd_delete "$@"
+            ;;
+        export)
+            cmd_export "$@"
+            ;;
+        serve|server)
+            cmd_serve "$@"
+            ;;
+        open)
+            cmd_open
+            ;;
+        -h|--help|help)
+            show_help
+            ;;
+        -v|--version)
+            show_version
+            ;;
         *)
-            echo -e "${RED}Unknown command: $cmd${NC}"
+            echo -e "${RED}Unknown command: $cmd${NC}" >&2
             show_help
             exit 1
             ;;
