@@ -1,4 +1,4 @@
-# SimpleLLMs Blackboard
+<img width="1078" height="793" alt="Screenshot 2026-01-11 at 12 11 19 pm" src="https://github.com/user-attachments/assets/dd7424eb-e0f6-4351-aa67-e6cd43eadd5f" /># SimpleLLMs Blackboard
 
 > **"I WILL NOT HALLUCINATE"** - Every Agent's Detention
 
@@ -18,6 +18,7 @@ The Blackboard is the anti-pattern guide for SimpleLLMs agents. Like Bart Simpso
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
+![Uploading Screenshot 2026-01-11 at 12.11.19 pm.png…]()
 
 ---
 
