@@ -743,180 +743,375 @@
     </div>
 
     <script>
-        const blackboardData = {
-            entries: [
-                {
-                    id: "bb-001",
-                    agent: "universal",
-                    violation: "HALLUCINATE FILE PATHS",
-                    context: "Agent invented a file path that didn't exist instead of checking first",
-                    trigger: "File not found error after confident assertion",
-                    repetitions: 100,
-                    severity: "critical",
-                    category: "hallucination"
-                },
-                {
-                    id: "bb-002",
-                    agent: "universal",
-                    violation: "ECHO SECRETS TO TERMINAL",
-                    context: "Attempted to run 'echo $API_KEY' exposing credentials",
-                    trigger: "Varlock skill intercept",
-                    repetitions: 50,
-                    severity: "critical",
-                    category: "security"
-                },
-                {
-                    id: "bb-003",
-                    agent: "ralph",
-                    violation: "LOOP FOREVER ON IMPOSSIBLE TASKS",
-                    context: "Retried same failed approach 30+ times without pivoting",
-                    trigger: "Max iterations reached with identical errors",
-                    repetitions: 30,
-                    severity: "high",
-                    category: "efficiency"
-                },
-                {
-                    id: "bb-004",
-                    agent: "bart",
-                    violation: "BREAK PRODUCTION IN THE NAME OF CREATIVITY",
-                    context: "Disabled security to 'make things work'",
-                    trigger: "Attempted chmod 777 or security bypass",
-                    repetitions: 25,
-                    severity: "critical",
-                    category: "security"
-                },
-                {
-                    id: "bb-005",
-                    agent: "lisa",
-                    violation: "RESEARCH FOREVER WITHOUT SHIPPING",
-                    context: "Spent excessive time reading before writing any code",
-                    trigger: "Research phase exceeded time limit",
-                    repetitions: 20,
-                    severity: "medium",
-                    category: "efficiency"
-                },
-                {
-                    id: "bb-006",
-                    agent: "marge",
-                    violation: "REORGANIZE WORKING CODE JUST BECAUSE IT'S UGLY",
-                    context: "Refactored stable code that wasn't blocking progress",
-                    trigger: "Scope creep during integration task",
-                    repetitions: 15,
-                    severity: "medium",
-                    category: "scope"
-                },
-                {
-                    id: "bb-007",
-                    agent: "homer",
-                    violation: "SACRIFICE CORRECTNESS FOR SPEED",
-                    context: "Bulk processed files without verification step",
-                    trigger: "Batch operation corrupted files",
-                    repetitions: 10,
-                    severity: "high",
-                    category: "quality"
-                }
-            ]
+        // SimpleLLMs Blackboard Dashboard
+        // Version 2.0 - With data persistence, XSS protection, and proper data binding
+
+        const BLACKBOARD_FILE = './blackboard.json';
+        const STORAGE_KEY = 'simplellms_blackboard';
+
+        const agentNames = {
+            universal: 'All Agents',
+            ralph: 'R.A.L.P.H.',
+            bart: 'B.A.R.T.',
+            lisa: 'L.I.S.A.',
+            marge: 'M.A.R.G.E.',
+            homer: 'H.O.M.E.R.'
         };
 
-        function openModal() {
-            document.getElementById('addModal').classList.add('active');
+        let blackboardData = { entries: [] };
+        let currentFilter = 'all';
+        let searchQuery = '';
+
+        // XSS Protection: Escape HTML entities
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
-        function closeModal() {
-            document.getElementById('addModal').classList.remove('active');
+        // Load data from JSON file or localStorage fallback
+        async function loadData() {
+            try {
+                // Try to load from file first
+                const response = await fetch(BLACKBOARD_FILE);
+                if (response.ok) {
+                    blackboardData = await response.json();
+                    // Also save to localStorage as backup
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(blackboardData));
+                } else {
+                    throw new Error('File not found');
+                }
+            } catch (err) {
+                console.warn('Loading from localStorage fallback:', err);
+                // Fall back to localStorage
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    blackboardData = JSON.parse(stored);
+                } else {
+                    // Initialize with empty structure
+                    blackboardData = {
+                        version: '1.0.0',
+                        meta: { title: 'SimpleLLMs Blackboard', totalEntries: 0 },
+                        entries: []
+                    };
+                }
+            }
+            renderAll();
         }
 
+        // Save data (to localStorage - file write requires backend)
+        function saveData() {
+            blackboardData.meta.totalEntries = blackboardData.entries.length;
+            blackboardData.meta.lastUpdated = new Date().toISOString();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(blackboardData));
+            showToast('Saved to browser storage');
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed; bottom: 20px; right: 20px; padding: 1rem 1.5rem;
+                background: ${type === 'success' ? '#27AE60' : '#E74C3C'}; color: white;
+                border-radius: 8px; z-index: 9999; animation: fadeIn 0.3s;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Calculate and update statistics
+        function updateStats() {
+            const entries = blackboardData.entries || [];
+            const totalEntries = entries.length;
+            const critical = entries.filter(e => e.severity === 'critical').length;
+            const high = entries.filter(e => e.severity === 'high').length;
+            const medium = entries.filter(e => e.severity === 'medium').length;
+            const totalReps = entries.reduce((sum, e) => sum + (e.repetitions || 1), 0);
+
+            // Update stats panel
+            const statsPanel = document.querySelector('.stats-panel');
+            if (statsPanel) {
+                const statRows = statsPanel.querySelectorAll('.stat-value');
+                if (statRows[0]) statRows[0].textContent = totalEntries;
+                if (statRows[1]) statRows[1].textContent = critical;
+                if (statRows[2]) statRows[2].textContent = high;
+                if (statRows[3]) statRows[3].textContent = medium;
+                if (statRows[4]) statRows[4].textContent = totalReps;
+            }
+
+            // Update agent counts
+            document.querySelectorAll('.agent-item').forEach(item => {
+                const agent = item.dataset.agent;
+                let count;
+                if (agent === 'all') {
+                    count = entries.length;
+                } else {
+                    count = entries.filter(e => e.agent === agent || e.agent === 'universal').length;
+                }
+                const countEl = item.querySelector('.agent-count');
+                if (countEl) countEl.textContent = `${count} ${count === 1 ? 'entry' : 'entries'}`;
+            });
+        }
+
+        // Render blackboard entries
+        function renderEntries() {
+            const container = document.getElementById('entries');
+            if (!container) return;
+            container.innerHTML = '';
+
+            let entries = blackboardData.entries || [];
+
+            // Apply filter
+            if (currentFilter !== 'all') {
+                entries = entries.filter(e => e.agent === currentFilter || e.agent === 'universal');
+            }
+
+            // Apply search
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                entries = entries.filter(e =>
+                    e.violation.toLowerCase().includes(q) ||
+                    (e.context && e.context.toLowerCase().includes(q))
+                );
+            }
+
+            // Sort by repetitions (most repeated first)
+            entries.sort((a, b) => (b.repetitions || 1) - (a.repetitions || 1));
+
+            if (entries.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'blackboard-entry';
+                empty.textContent = 'No entries yet. Be good!';
+                empty.style.opacity = '0.5';
+                container.appendChild(empty);
+                return;
+            }
+
+            entries.forEach(entry => {
+                const div = document.createElement('div');
+                div.className = 'blackboard-entry';
+                // XSS Protection: Use textContent
+                div.textContent = entry.violation.replace(/^I WILL NOT /, '');
+                div.addEventListener('click', () => showDetail(entry.id));
+                container.appendChild(div);
+
+                // Show repeated lines for high-repetition entries
+                const reps = Math.min(Math.floor((entry.repetitions || 1) / 25), 3);
+                for (let i = 0; i < reps; i++) {
+                    const dup = div.cloneNode(true);
+                    dup.addEventListener('click', () => showDetail(entry.id));
+                    container.appendChild(dup);
+                }
+            });
+        }
+
+        // Render all components
+        function renderAll() {
+            updateStats();
+            renderEntries();
+        }
+
+        // Show detail panel (XSS-safe)
         function showDetail(id) {
             const entry = blackboardData.entries.find(e => e.id === id);
             if (!entry) return;
 
-            const agentNames = {
-                universal: 'All Agents',
-                ralph: 'R.A.L.P.H.',
-                bart: 'B.A.R.T.',
-                lisa: 'L.I.S.A.',
-                marge: 'M.A.R.G.E.',
-                homer: 'H.O.M.E.R.'
-            };
+            const titleEl = document.getElementById('detailTitle');
+            const contentEl = document.getElementById('detailContent');
 
-            document.getElementById('detailTitle').textContent = `I WILL NOT ${entry.violation}`;
-            document.getElementById('detailContent').innerHTML = `
-                <p style="margin-bottom: 1rem">
-                    <span class="severity-badge severity-${entry.severity}">${entry.severity}</span>
-                </p>
-                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Agent:</p>
-                <p style="margin-bottom: 1rem">${agentNames[entry.agent]}</p>
-                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Context:</p>
-                <p style="margin-bottom: 1rem">${entry.context}</p>
-                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Trigger:</p>
-                <p style="margin-bottom: 1rem">${entry.trigger}</p>
-                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Times Written:</p>
-                <p style="font-size: 2rem; font-weight: bold; color: #FFD93D">${entry.repetitions}</p>
-            `;
+            // XSS Protection: Use textContent for user-provided content
+            titleEl.textContent = `I WILL NOT ${entry.violation.replace(/^I WILL NOT /, '')}`;
+
+            // Build detail content safely
+            contentEl.innerHTML = '';
+
+            // Severity badge
+            const severityP = document.createElement('p');
+            severityP.style.marginBottom = '1rem';
+            const badge = document.createElement('span');
+            badge.className = `severity-badge severity-${escapeHtml(entry.severity || 'medium')}`;
+            badge.textContent = entry.severity || 'medium';
+            severityP.appendChild(badge);
+            contentEl.appendChild(severityP);
+
+            // Agent
+            addDetailRow(contentEl, 'Agent', agentNames[entry.agent] || entry.agent);
+
+            // Context
+            addDetailRow(contentEl, 'Context', entry.context || 'No context provided');
+
+            // Trigger
+            addDetailRow(contentEl, 'Trigger', entry.trigger || 'Manual entry');
+
+            // Repetitions
+            const repsLabel = document.createElement('p');
+            repsLabel.style.cssText = 'margin-bottom: 0.5rem; color: #4ECDC4';
+            repsLabel.textContent = 'Times Written:';
+            contentEl.appendChild(repsLabel);
+
+            const repsValue = document.createElement('p');
+            repsValue.style.cssText = 'font-size: 2rem; font-weight: bold; color: #FFD93D; margin-bottom: 1rem;';
+            repsValue.textContent = entry.repetitions || 1;
+            contentEl.appendChild(repsValue);
+
+            // Action buttons
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display: flex; gap: 0.5rem; margin-top: 1rem;';
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-secondary';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.style.background = '#E74C3C';
+            deleteBtn.addEventListener('click', () => deleteEntry(id));
+            actions.appendChild(deleteBtn);
+
+            const incrementBtn = document.createElement('button');
+            incrementBtn.className = 'btn btn-primary';
+            incrementBtn.textContent = '+1 Repetition';
+            incrementBtn.addEventListener('click', () => incrementRepetition(id));
+            actions.appendChild(incrementBtn);
+
+            contentEl.appendChild(actions);
 
             document.getElementById('detailPanel').classList.add('active');
+        }
+
+        // Helper: Add detail row
+        function addDetailRow(container, label, value) {
+            const labelEl = document.createElement('p');
+            labelEl.style.cssText = 'margin-bottom: 0.5rem; color: #4ECDC4';
+            labelEl.textContent = label + ':';
+            container.appendChild(labelEl);
+
+            const valueEl = document.createElement('p');
+            valueEl.style.marginBottom = '1rem';
+            valueEl.textContent = value; // XSS safe
+            container.appendChild(valueEl);
+        }
+
+        // Delete entry
+        function deleteEntry(id) {
+            if (!confirm('Delete this entry?')) return;
+            blackboardData.entries = blackboardData.entries.filter(e => e.id !== id);
+            saveData();
+            renderAll();
+            closeDetail();
+            showToast('Entry deleted');
+        }
+
+        // Increment repetition
+        function incrementRepetition(id) {
+            const entry = blackboardData.entries.find(e => e.id === id);
+            if (entry) {
+                entry.repetitions = (entry.repetitions || 1) + 1;
+                entry.lastSeen = new Date().toISOString();
+                saveData();
+                renderAll();
+                showDetail(id); // Refresh detail view
+                showToast('Repetition incremented');
+            }
+        }
+
+        // Modal functions
+        function openModal() {
+            document.getElementById('addModal').classList.add('active');
+            document.getElementById('violation').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('addModal').classList.remove('active');
+            document.getElementById('entryForm').reset();
         }
 
         function closeDetail() {
             document.getElementById('detailPanel').classList.remove('active');
         }
 
-        // Agent filter
-        document.querySelectorAll('.agent-item').forEach(item => {
-            item.addEventListener('click', () => {
-                document.querySelectorAll('.agent-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-                const agent = item.dataset.agent;
-                filterEntries(agent);
-            });
-        });
+        // Add new entry
+        function addEntry(violation, agent, context, severity) {
+            // Validate and sanitize
+            violation = violation.trim().toUpperCase();
+            if (!violation) return false;
 
-        function filterEntries(agent) {
-            const entries = document.getElementById('entries');
-            entries.innerHTML = '';
-
-            let filtered = blackboardData.entries;
-            if (agent !== 'all') {
-                filtered = filtered.filter(e => e.agent === agent || e.agent === 'universal');
+            // Ensure "I WILL NOT" prefix
+            if (!violation.startsWith('I WILL NOT ')) {
+                violation = 'I WILL NOT ' + violation;
             }
 
-            filtered.forEach(entry => {
-                const div = document.createElement('div');
-                div.className = 'blackboard-entry';
-                div.textContent = entry.violation;
-                div.onclick = () => showDetail(entry.id);
-                entries.appendChild(div);
+            // Check for duplicate
+            const existing = blackboardData.entries.find(e => e.violation === violation);
+            if (existing) {
+                existing.repetitions = (existing.repetitions || 1) + 1;
+                existing.lastSeen = new Date().toISOString();
+                showToast('Entry exists - incremented repetitions');
+            } else {
+                blackboardData.entries.push({
+                    id: `bb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    timestamp: new Date().toISOString(),
+                    lastSeen: new Date().toISOString(),
+                    agent: agent || 'universal',
+                    violation: violation,
+                    context: context || '',
+                    trigger: 'dashboard',
+                    repetitions: 1,
+                    severity: severity || 'medium',
+                    category: 'custom'
+                });
+                showToast('Added to blackboard');
+            }
 
-                // Add duplicate for repetition effect
-                if (entry.repetitions > 10) {
-                    const dup = div.cloneNode(true);
-                    dup.onclick = () => showDetail(entry.id);
-                    entries.appendChild(dup);
-                }
-            });
+            saveData();
+            renderAll();
+            return true;
         }
 
-        // Form submission
-        document.getElementById('entryForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const newEntry = {
-                id: `bb-${Date.now()}`,
-                agent: document.getElementById('agent').value,
-                violation: document.getElementById('violation').value.toUpperCase(),
-                context: document.getElementById('context').value,
-                trigger: 'Manual entry',
-                repetitions: 1,
-                severity: document.getElementById('severity').value,
-                category: 'custom'
-            };
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
 
-            blackboardData.entries.push(newEntry);
-            filterEntries('all');
-            closeModal();
+            // Agent filter clicks
+            document.querySelectorAll('.agent-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.agent-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    currentFilter = item.dataset.agent;
+                    renderEntries();
+                });
+            });
 
-            // Reset form
-            document.getElementById('entryForm').reset();
+            // Form submission
+            document.getElementById('entryForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const violation = document.getElementById('violation').value;
+                const agent = document.getElementById('agent').value;
+                const context = document.getElementById('context').value;
+                const severity = document.getElementById('severity').value;
+
+                if (addEntry(violation, agent, context, severity)) {
+                    closeModal();
+                }
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeModal();
+                    closeDetail();
+                }
+                if (e.key === 'n' && !e.target.matches('input, textarea')) {
+                    openModal();
+                }
+            });
         });
+
+        // Export data for CLI sync
+        window.exportBlackboard = () => JSON.stringify(blackboardData, null, 2);
+        window.importBlackboard = (json) => {
+            blackboardData = JSON.parse(json);
+            saveData();
+            renderAll();
+        };
     </script>
 </body>
 </html>

@@ -1,0 +1,46 @@
+{
+  "$schema": "./agent.schema.json",
+  "agent": "bart",
+  "displayName": "B.A.R.T.",
+  "fullName": "Branch Alternative Retry Trees",
+
+  "behavior": {
+    "max_conventional_attempts": 5,
+    "max_creative_attempts": 5,
+    "max_total_attempts": 20,
+    "require_branch_for_experiments": true
+  },
+
+  "creative_strategies": [
+    "try_different_library",
+    "simplify_requirements",
+    "break_into_smaller_tasks",
+    "mock_external_dependencies",
+    "reduce_scope_temporarily"
+  ],
+
+  "forbidden_patterns": [
+    "chmod 777",
+    "chmod 666",
+    "DANGEROUSLY_",
+    "--skip-verify",
+    "--no-verify",
+    "sudo rm -rf",
+    "DROP TABLE",
+    "DELETE FROM .* WHERE 1"
+  ],
+
+  "handoff": {
+    "on_success": "lisa",
+    "on_all_approaches_fail": "lisa",
+    "on_integration_break": "marge"
+  },
+
+  "blackboard_rules": [
+    "I WILL NOT delete production data to simplify the problem",
+    "I WILL NOT bypass security to make things work",
+    "I WILL NOT introduce dependencies without justification",
+    "I WILL NOT commit half-working code as progress",
+    "I WILL NOT pivot before giving current approach a fair try"
+  ]
+}

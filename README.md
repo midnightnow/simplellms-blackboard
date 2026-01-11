@@ -2,6 +2,9 @@
 
 > **"I WILL NOT HALLUCINATE"** - Every Agent's Detention
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![SimpleLLMs](https://img.shields.io/badge/SimpleLLMs-Blackboard-purple)](https://github.com/midnightnow/simplellms)
+
 The Blackboard is the anti-pattern guide for SimpleLLMs agents. Like Bart Simpson's detention chalkboard, each agent has things they **must not do**.
 
 ```
@@ -14,6 +17,70 @@ The Blackboard is the anti-pattern guide for SimpleLLMs agents. Like Bart Simpso
 │   I WILL NOT HALLUCINATE                                    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Start
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/midnightnow/simplellms-blackboard.git
+cd simplellms-blackboard
+
+# Make scripts executable
+chmod +x blackboard-cli.sh capture.sh
+
+# Optional: Add to PATH
+ln -s $(pwd)/blackboard-cli.sh /usr/local/bin/blackboard
+
+# Requires: jq for JSON processing
+brew install jq  # macOS
+```
+
+### Usage
+
+```bash
+# Open the visual dashboard
+open dashboard.html
+# Or serve locally: python3 -m http.server 8080
+
+# CLI Commands
+./blackboard-cli.sh list              # List all entries
+./blackboard-cli.sh add "HALLUCINATE" # Add new violation
+./blackboard-cli.sh check             # Show statistics
+./blackboard-cli.sh search "secret"   # Search entries
+
+# Capture agent corrections automatically
+echo "You must not echo secrets!" | ./capture.sh
+```
+
+### Files
+
+```
+simplellms-blackboard/
+├── README.md              # This file
+├── SKILL.md               # Claude Code skill integration
+├── blackboard.json        # Data store (entries)
+├── blackboard.schema.json # JSON Schema for validation
+├── blackboard-cli.sh      # CLI tool
+├── capture.sh             # Correction capture hook
+├── dashboard.html         # Visual dashboard (Simpsons-style)
+├── agents/                # Per-agent blackboard rules
+│   ├── ralph-blackboard.md
+│   ├── bart-blackboard.md
+│   ├── lisa-blackboard.md
+│   ├── marge-blackboard.md
+│   └── homer-blackboard.md
+└── config/                # Example configuration files
+    ├── .simplellmsrc.example
+    ├── .ralphrc.example
+    ├── .bartrc.example
+    ├── .lisarc.example
+    ├── .margerc.example
+    └── .homerrc.example
 ```
 
 ---

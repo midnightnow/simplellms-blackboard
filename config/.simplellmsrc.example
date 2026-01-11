@@ -1,0 +1,49 @@
+{
+  "$schema": "./simplellms.schema.json",
+  "version": "1.0.0",
+
+  "blackboard": {
+    "enabled": true,
+    "enforce_rules": true,
+    "data_file": "~/.simplellms/blackboard.json",
+    "log_file": "~/.simplellms/blackboard.log",
+    "log_violations": true,
+
+    "capture": {
+      "auto_detect": true,
+      "require_confirmation": true,
+      "trigger_phrases": [
+        "never do",
+        "I told you",
+        "must not",
+        "should not",
+        "don't do that",
+        "stop doing",
+        "WILL NOT"
+      ]
+    },
+
+    "display": {
+      "max_repetitions_shown": 5,
+      "sort_by": "repetitions",
+      "show_universal": true
+    }
+  },
+
+  "default_agent": "lisa",
+  "orchestrator_enabled": true,
+
+  "max_iterations": {
+    "ralph": 30,
+    "bart": 20,
+    "lisa": 15,
+    "marge": 30,
+    "homer": 50
+  },
+
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "directory": "~/.simplellms/logs"
+  }
+}

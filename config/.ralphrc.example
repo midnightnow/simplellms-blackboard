@@ -1,0 +1,32 @@
+{
+  "$schema": "./agent.schema.json",
+  "agent": "ralph",
+  "displayName": "R.A.L.P.H.",
+  "fullName": "Retry And Loop Persistently until Happy",
+
+  "behavior": {
+    "max_iterations": 30,
+    "max_same_error_retries": 3,
+    "exit_on_success": true,
+    "completion_keywords": ["DONE", "COMPLETE", "PASSED", "SUCCESS"]
+  },
+
+  "handoff": {
+    "on_repeated_failure": "bart",
+    "on_impossible_task": "lisa",
+    "threshold_iterations": 10
+  },
+
+  "blackboard_rules": [
+    "I WILL NOT retry the same failed approach indefinitely",
+    "I WILL NOT ignore error messages",
+    "I WILL NOT brute force authentication",
+    "I WILL NOT waste tokens on known-bad approaches",
+    "I WILL NOT assume one more try fixes design flaws"
+  ],
+
+  "prohibited_patterns": [
+    "retry.*same.*error",
+    "attempt.*\\d{2,}.*times"
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/midnightnow/simplellms-blackboard/blackboard.schema.json",
+  "title": "SimpleLLMs Blackboard",
+  "description": "Schema for agent corrections and learned limitations",
+  "type": "object",
+  "required": ["version", "meta", "entries"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0"]
+    },
+    "meta": {
+      "type": "object",
+      "description": "Metadata about the blackboard",
+      "required": ["title", "totalEntries"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Title of the blackboard"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the blackboard's purpose"
+        },
+        "lastUpdated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last update"
+        },
+        "totalEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of entries"
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "Array of blackboard entries",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "categories": {
+      "type": "object",
+      "description": "Category definitions",
+      "additionalProperties": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "agents": {
+      "type": "object",
+      "description": "Agent definitions",
+      "additionalProperties": {
+        "$ref": "#/$defs/agent"
+      }
+    },
+    "triggerPhrases": {
+      "type": "array",
+      "description": "Phrases that trigger blackboard capture",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["id", "violation", "agent", "severity"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier",
+          "pattern": "^bb-[0-9]+-?[0-9]*$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the entry was created"
+        },
+        "lastSeen": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the violation was last encountered"
+        },
+        "agent": {
+          "type": "string",
+          "description": "Which agent this applies to",
+          "enum": ["universal", "ralph", "bart", "lisa", "marge", "homer"]
+        },
+        "violation": {
+          "type": "string",
+          "description": "The violation statement (I WILL NOT ...)",
+          "pattern": "^I WILL NOT .+",
+          "minLength": 15,
+          "maxLength": 200
+        },
+        "context": {
+          "type": "string",
+          "description": "Context explaining when/how this occurred",
+          "maxLength": 1000
+        },
+        "trigger": {
+          "type": "string",
+          "description": "What triggered this entry (capture.sh, cli, manual, etc.)"
+        },
+        "repetitions": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "How many times this has been recorded"
+        },
+        "severity": {
+          "type": "string",
+          "description": "Severity level of the violation",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the violation",
+          "enum": ["hallucination", "security", "efficiency", "scope", "quality", "custom"]
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string",
+          "description": "Display color (hex)",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon identifier"
+        },
+        "description": {
+          "type": "string",
+          "description": "Category description"
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Display name for the agent"
+        },
+        "color": {
+          "type": "string",
+          "description": "Display color (hex)",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Avatar identifier"
+        }
+      }
+    }
+  }
+}
