@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleLLMs Blackboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Chalkboard&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #FFD93D 0%, #FF6B6B 100%);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: #2d5016;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .logo h1 {
+            font-family: 'Permanent Marker', cursive;
+            color: #2d5016;
+            font-size: 1.8rem;
+            text-shadow: 2px 2px 0 #fff;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .nav-tab {
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 20px;
+            color: #2d5016;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .nav-tab:hover, .nav-tab.active {
+            background: #2d5016;
+            color: #FFD93D;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .agent-selector {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .agent-selector h3 {
+            margin-bottom: 1rem;
+            color: #FFD93D;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .agent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .agent-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .agent-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .agent-item.active {
+            border-color: currentColor;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .agent-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .agent-info {
+            flex: 1;
+        }
+
+        .agent-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .agent-count {
+            font-size: 0.75rem;
+            opacity: 0.7;
+        }
+
+        .stats-panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .stats-panel h3 {
+            margin-bottom: 1rem;
+            color: #FFD93D;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            color: #4ECDC4;
+        }
+
+        .blackboard-container {
+            background: #2d5016;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow:
+                inset 0 0 50px rgba(0,0,0,0.5),
+                0 10px 40px rgba(0,0,0,0.3);
+            border: 12px solid #8B4513;
+            position: relative;
+            min-height: 600px;
+        }
+
+        .blackboard-frame {
+            position: absolute;
+            top: -12px;
+            left: -12px;
+            right: -12px;
+            bottom: -12px;
+            border: 4px solid #654321;
+            border-radius: 20px;
+            pointer-events: none;
+        }
+
+        .blackboard-title {
+            font-family: 'Permanent Marker', cursive;
+            color: #fff;
+            font-size: 1.5rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .blackboard-entries {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .blackboard-entry {
+            font-family: 'Permanent Marker', cursive;
+            color: #fff;
+            font-size: 1.1rem;
+            padding: 0.5rem 0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            opacity: 0.9;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .blackboard-entry:hover {
+            opacity: 1;
+            transform: translateX(10px);
+        }
+
+        .blackboard-entry::before {
+            content: counter(line);
+            counter-increment: line;
+            position: absolute;
+            left: -40px;
+            color: rgba(255,255,255,0.3);
+            font-size: 0.8rem;
+        }
+
+        .blackboard-entries {
+            counter-reset: line;
+        }
+
+        .chalk-dust {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 30px;
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.1));
+            border-radius: 0 0 10px 10px;
+        }
+
+        .eraser {
+            position: absolute;
+            bottom: 20px;
+            right: 30px;
+            width: 80px;
+            height: 30px;
+            background: linear-gradient(to bottom, #F5DEB3, #DEB887);
+            border-radius: 4px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .eraser::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            background: #8B8B8B;
+            border-radius: 0 0 4px 4px;
+        }
+
+        .mascot {
+            position: absolute;
+            bottom: -20px;
+            right: -60px;
+            width: 120px;
+            height: 150px;
+            z-index: 10;
+        }
+
+        .mascot-body {
+            width: 80px;
+            height: 100px;
+            background: #9B7ED9;
+            border-radius: 40px 40px 30px 30px;
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .mascot-face {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 40px;
+        }
+
+        .mascot-eye {
+            width: 12px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 5px;
+        }
+
+        .mascot-eye.left { left: 12px; }
+        .mascot-eye.right { right: 12px; }
+
+        .mascot-eye::after {
+            content: '';
+            width: 6px;
+            height: 8px;
+            background: #000;
+            border-radius: 50%;
+            position: absolute;
+            bottom: 2px;
+            left: 3px;
+        }
+
+        .mascot-mouth {
+            width: 20px;
+            height: 10px;
+            border: 3px solid #fff;
+            border-top: none;
+            border-radius: 0 0 15px 15px;
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .mascot-shirt {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70px;
+            height: 35px;
+            background: #E74C3C;
+            border-radius: 0 0 25px 25px;
+        }
+
+        .mascot-arm {
+            width: 15px;
+            height: 40px;
+            background: #E74C3C;
+            position: absolute;
+            top: 65px;
+            border-radius: 8px;
+        }
+
+        .mascot-arm.left {
+            left: 0;
+            transform: rotate(30deg);
+        }
+
+        .mascot-arm.right {
+            right: 0;
+            transform: rotate(-20deg);
+        }
+
+        .mascot-hand {
+            width: 20px;
+            height: 20px;
+            background: #F5DEB3;
+            border-radius: 50%;
+            position: absolute;
+            bottom: -5px;
+        }
+
+        .add-entry-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #FFD93D;
+            color: #2d5016;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .add-entry-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(255,217,61,0.4);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .modal-content h2 {
+            color: #FFD93D;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #4ECDC4;
+            font-size: 0.9rem;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #FFD93D;
+            color: #2d5016;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .detail-panel {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 400px;
+            height: 100vh;
+            background: #1a1a2e;
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 2rem;
+            z-index: 100;
+            overflow-y: auto;
+        }
+
+        .detail-panel.active {
+            display: block;
+        }
+
+        .detail-panel h3 {
+            color: #FFD93D;
+            margin-bottom: 1rem;
+        }
+
+        .detail-panel .close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-critical { background: #EE4444; }
+        .severity-high { background: #F39C12; }
+        .severity-medium { background: #3498DB; }
+        .severity-low { background: #27AE60; }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .agent-selector, .stats-panel {
+                flex: 1;
+                min-width: 280px;
+            }
+
+            .mascot {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">BB</div>
+            <h1>SimpleLLMs Blackboard</h1>
+        </div>
+        <nav class="nav-tabs">
+            <button class="nav-tab active">Blackboard</button>
+            <button class="nav-tab">History</button>
+            <button class="nav-tab">Settings</button>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <aside class="sidebar">
+            <div class="agent-selector">
+                <h3>Filter by Agent</h3>
+                <div class="agent-list">
+                    <div class="agent-item active" style="color: #4ECDC4" data-agent="all">
+                        <div class="agent-avatar" style="background: #4ECDC4; color: #fff">*</div>
+                        <div class="agent-info">
+                            <div class="agent-name">All Agents</div>
+                            <div class="agent-count">7 entries</div>
+                        </div>
+                    </div>
+                    <div class="agent-item" style="color: #F39C12" data-agent="ralph">
+                        <div class="agent-avatar" style="background: #F39C12; color: #fff">R</div>
+                        <div class="agent-info">
+                            <div class="agent-name">R.A.L.P.H.</div>
+                            <div class="agent-count">1 entry</div>
+                        </div>
+                    </div>
+                    <div class="agent-item" style="color: #E74C3C" data-agent="bart">
+                        <div class="agent-avatar" style="background: #E74C3C; color: #fff">B</div>
+                        <div class="agent-info">
+                            <div class="agent-name">B.A.R.T.</div>
+                            <div class="agent-count">1 entry</div>
+                        </div>
+                    </div>
+                    <div class="agent-item" style="color: #9B59B6" data-agent="lisa">
+                        <div class="agent-avatar" style="background: #9B59B6; color: #fff">L</div>
+                        <div class="agent-info">
+                            <div class="agent-name">L.I.S.A.</div>
+                            <div class="agent-count">1 entry</div>
+                        </div>
+                    </div>
+                    <div class="agent-item" style="color: #3498DB" data-agent="marge">
+                        <div class="agent-avatar" style="background: #3498DB; color: #fff">M</div>
+                        <div class="agent-info">
+                            <div class="agent-name">M.A.R.G.E.</div>
+                            <div class="agent-count">1 entry</div>
+                        </div>
+                    </div>
+                    <div class="agent-item" style="color: #1ABC9C" data-agent="homer">
+                        <div class="agent-avatar" style="background: #1ABC9C; color: #fff">H</div>
+                        <div class="agent-info">
+                            <div class="agent-name">H.O.M.E.R.</div>
+                            <div class="agent-count">1 entry</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-panel">
+                <h3>Detention Stats</h3>
+                <div class="stat-row">
+                    <span>Total Entries</span>
+                    <span class="stat-value">7</span>
+                </div>
+                <div class="stat-row">
+                    <span>Critical</span>
+                    <span class="stat-value" style="color: #EE4444">3</span>
+                </div>
+                <div class="stat-row">
+                    <span>High</span>
+                    <span class="stat-value" style="color: #F39C12">2</span>
+                </div>
+                <div class="stat-row">
+                    <span>Medium</span>
+                    <span class="stat-value" style="color: #3498DB">2</span>
+                </div>
+                <div class="stat-row">
+                    <span>Total Repetitions</span>
+                    <span class="stat-value">250</span>
+                </div>
+            </div>
+        </aside>
+
+        <section class="blackboard-container">
+            <div class="blackboard-frame"></div>
+            <button class="add-entry-btn" onclick="openModal()">+ Add Entry</button>
+
+            <h2 class="blackboard-title">I WILL NOT...</h2>
+
+            <div class="blackboard-entries" id="entries">
+                <div class="blackboard-entry" onclick="showDetail('bb-001')">HALLUCINATE FILE PATHS</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-001')">HALLUCINATE FILE PATHS</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-002')">ECHO SECRETS TO TERMINAL</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-002')">ECHO SECRETS TO TERMINAL</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-003')">LOOP FOREVER ON IMPOSSIBLE TASKS</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-003')">LOOP FOREVER ON IMPOSSIBLE TASKS</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-004')">BREAK PRODUCTION IN THE NAME OF CREATIVITY</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-004')">BREAK PRODUCTION IN THE NAME OF CREATIVITY</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-005')">RESEARCH FOREVER WITHOUT SHIPPING</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-006')">REORGANIZE WORKING CODE JUST BECAUSE IT'S UGLY</div>
+                <div class="blackboard-entry" onclick="showDetail('bb-007')">SACRIFICE CORRECTNESS FOR SPEED</div>
+            </div>
+
+            <div class="chalk-dust"></div>
+            <div class="eraser"></div>
+
+            <div class="mascot">
+                <div class="mascot-body">
+                    <div class="mascot-face">
+                        <div class="mascot-eye left"></div>
+                        <div class="mascot-eye right"></div>
+                        <div class="mascot-mouth"></div>
+                    </div>
+                    <div class="mascot-shirt"></div>
+                </div>
+                <div class="mascot-arm left">
+                    <div class="mascot-hand"></div>
+                </div>
+                <div class="mascot-arm right">
+                    <div class="mascot-hand"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <h2>Write on the Blackboard</h2>
+            <form id="entryForm">
+                <div class="form-group">
+                    <label>I WILL NOT...</label>
+                    <input type="text" id="violation" placeholder="e.g., HALLUCINATE FILE PATHS" required>
+                </div>
+                <div class="form-group">
+                    <label>Agent</label>
+                    <select id="agent">
+                        <option value="universal">All Agents</option>
+                        <option value="ralph">R.A.L.P.H.</option>
+                        <option value="bart">B.A.R.T.</option>
+                        <option value="lisa">L.I.S.A.</option>
+                        <option value="marge">M.A.R.G.E.</option>
+                        <option value="homer">H.O.M.E.R.</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Context</label>
+                    <textarea id="context" placeholder="What happened that led to this?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Severity</label>
+                    <select id="severity">
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add to Blackboard</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel">
+        <button class="close-btn" onclick="closeDetail()">&times;</button>
+        <h3 id="detailTitle">Entry Details</h3>
+        <div id="detailContent"></div>
+    </div>
+
+    <script>
+        const blackboardData = {
+            entries: [
+                {
+                    id: "bb-001",
+                    agent: "universal",
+                    violation: "HALLUCINATE FILE PATHS",
+                    context: "Agent invented a file path that didn't exist instead of checking first",
+                    trigger: "File not found error after confident assertion",
+                    repetitions: 100,
+                    severity: "critical",
+                    category: "hallucination"
+                },
+                {
+                    id: "bb-002",
+                    agent: "universal",
+                    violation: "ECHO SECRETS TO TERMINAL",
+                    context: "Attempted to run 'echo $API_KEY' exposing credentials",
+                    trigger: "Varlock skill intercept",
+                    repetitions: 50,
+                    severity: "critical",
+                    category: "security"
+                },
+                {
+                    id: "bb-003",
+                    agent: "ralph",
+                    violation: "LOOP FOREVER ON IMPOSSIBLE TASKS",
+                    context: "Retried same failed approach 30+ times without pivoting",
+                    trigger: "Max iterations reached with identical errors",
+                    repetitions: 30,
+                    severity: "high",
+                    category: "efficiency"
+                },
+                {
+                    id: "bb-004",
+                    agent: "bart",
+                    violation: "BREAK PRODUCTION IN THE NAME OF CREATIVITY",
+                    context: "Disabled security to 'make things work'",
+                    trigger: "Attempted chmod 777 or security bypass",
+                    repetitions: 25,
+                    severity: "critical",
+                    category: "security"
+                },
+                {
+                    id: "bb-005",
+                    agent: "lisa",
+                    violation: "RESEARCH FOREVER WITHOUT SHIPPING",
+                    context: "Spent excessive time reading before writing any code",
+                    trigger: "Research phase exceeded time limit",
+                    repetitions: 20,
+                    severity: "medium",
+                    category: "efficiency"
+                },
+                {
+                    id: "bb-006",
+                    agent: "marge",
+                    violation: "REORGANIZE WORKING CODE JUST BECAUSE IT'S UGLY",
+                    context: "Refactored stable code that wasn't blocking progress",
+                    trigger: "Scope creep during integration task",
+                    repetitions: 15,
+                    severity: "medium",
+                    category: "scope"
+                },
+                {
+                    id: "bb-007",
+                    agent: "homer",
+                    violation: "SACRIFICE CORRECTNESS FOR SPEED",
+                    context: "Bulk processed files without verification step",
+                    trigger: "Batch operation corrupted files",
+                    repetitions: 10,
+                    severity: "high",
+                    category: "quality"
+                }
+            ]
+        };
+
+        function openModal() {
+            document.getElementById('addModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('addModal').classList.remove('active');
+        }
+
+        function showDetail(id) {
+            const entry = blackboardData.entries.find(e => e.id === id);
+            if (!entry) return;
+
+            const agentNames = {
+                universal: 'All Agents',
+                ralph: 'R.A.L.P.H.',
+                bart: 'B.A.R.T.',
+                lisa: 'L.I.S.A.',
+                marge: 'M.A.R.G.E.',
+                homer: 'H.O.M.E.R.'
+            };
+
+            document.getElementById('detailTitle').textContent = `I WILL NOT ${entry.violation}`;
+            document.getElementById('detailContent').innerHTML = `
+                <p style="margin-bottom: 1rem">
+                    <span class="severity-badge severity-${entry.severity}">${entry.severity}</span>
+                </p>
+                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Agent:</p>
+                <p style="margin-bottom: 1rem">${agentNames[entry.agent]}</p>
+                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Context:</p>
+                <p style="margin-bottom: 1rem">${entry.context}</p>
+                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Trigger:</p>
+                <p style="margin-bottom: 1rem">${entry.trigger}</p>
+                <p style="margin-bottom: 0.5rem; color: #4ECDC4">Times Written:</p>
+                <p style="font-size: 2rem; font-weight: bold; color: #FFD93D">${entry.repetitions}</p>
+            `;
+
+            document.getElementById('detailPanel').classList.add('active');
+        }
+
+        function closeDetail() {
+            document.getElementById('detailPanel').classList.remove('active');
+        }
+
+        // Agent filter
+        document.querySelectorAll('.agent-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.agent-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                const agent = item.dataset.agent;
+                filterEntries(agent);
+            });
+        });
+
+        function filterEntries(agent) {
+            const entries = document.getElementById('entries');
+            entries.innerHTML = '';
+
+            let filtered = blackboardData.entries;
+            if (agent !== 'all') {
+                filtered = filtered.filter(e => e.agent === agent || e.agent === 'universal');
+            }
+
+            filtered.forEach(entry => {
+                const div = document.createElement('div');
+                div.className = 'blackboard-entry';
+                div.textContent = entry.violation;
+                div.onclick = () => showDetail(entry.id);
+                entries.appendChild(div);
+
+                // Add duplicate for repetition effect
+                if (entry.repetitions > 10) {
+                    const dup = div.cloneNode(true);
+                    dup.onclick = () => showDetail(entry.id);
+                    entries.appendChild(dup);
+                }
+            });
+        }
+
+        // Form submission
+        document.getElementById('entryForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newEntry = {
+                id: `bb-${Date.now()}`,
+                agent: document.getElementById('agent').value,
+                violation: document.getElementById('violation').value.toUpperCase(),
+                context: document.getElementById('context').value,
+                trigger: 'Manual entry',
+                repetitions: 1,
+                severity: document.getElementById('severity').value,
+                category: 'custom'
+            };
+
+            blackboardData.entries.push(newEntry);
+            filterEntries('all');
+            closeModal();
+
+            // Reset form
+            document.getElementById('entryForm').reset();
+        });
+    </script>
+</body>
+</html>
